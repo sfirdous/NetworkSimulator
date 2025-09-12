@@ -26,3 +26,48 @@ void printBuffer(const char* name,Buffer buf,int index){
 
     printf("\n");
 }
+
+
+int createPacket(Buffer buf,char mac,unsigned char net,unsigned char machine,char pkt_type,unsigned char* payload,int payload_len){
+    if(payload_len > BUFFER_SIZE - 5)  return 0;    // 5 bytes for header + byte count
+
+    int total_len = 5+payload_len;                  // byte count + mac + net + machine + type + payload
+
+    buf[0][0] = total_len;                          // byte count
+    buf[0][1] = (unsigned char)mac;                 // MAC address
+    buf[0][2] = net;                                // SIP network byte
+    buf[0][3] = machine;                            // SIP machine byte
+    buf[0][4] = (unsigned char)pkt_type;            // Packet type
+
+    // Copy payload bytes
+    memcpy(&buf[0][5],payload,payload_len);
+
+    return 1; // success
+
+}
+
+void printPacket(Buffer buf,int index){
+    int len = buf[index][0];
+    if(len == 0){
+        printf("Buffer is empty.\n");
+        return;
+    }
+
+    char mac = (char)buf[index][1];
+    unsigned char net = buf[index][2];
+    unsigned char machine = buf[index][3];
+    char pkt_type = (char)buf[index][4];
+    int payload_len = len - 5;
+
+    printf("Packet details:\n");
+    printf(" Byte Count: %d\n",len);
+    printf(" MAC address: %c\n",mac);
+    printf(" SIP: (%d, %d)\n",net,machine);
+    printf(" Packet type: %c\n",pkt_type);
+
+    printf(" Payload (%d bytes): ",payload_len);
+    for(int i = 0; i < payload_len ; ++i){
+        printf("%02X ",buf[index][i]);
+    }
+    printf("\n");
+}

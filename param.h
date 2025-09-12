@@ -1,4 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #define BUFFER_SIZE 256
+
+// Packet types
+#define PKT_ACK 'A'
+#define PKT_DATA 'D'
+#define PKT_BROADCAST 'B'
+#define PKT_CONTROL 'C'
+#define PKT_ARP_REQ 'L'
+#define PKT_ARP_REPLY 'R'
 
 // Define a port buffer structure d[2][256]
 typedef unsigned char Buffer[2][BUFFER_SIZE];
