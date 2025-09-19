@@ -28,22 +28,84 @@ void printBuffer(const char* name,Buffer buf,int index){
 }
 
 
-int createPacket(Buffer buf,char mac,unsigned char net,unsigned char machine,char pkt_type,unsigned char* payload,int payload_len){
-    if(payload_len > BUFFER_SIZE - 5)  return 0;    // 5 bytes for header + byte count
+int createSIPPacket(Buffer buf,unsigned char net,unsigned char machine,char pkt_type,unsigned char* payload,int payload_len){
+    if(payload_len > BUFFER_SIZE - 6)  return 0;    // 6 bytes for header + byte count
 
-    int total_len = 5+payload_len;                  // byte count + mac + net + machine + type + payload
+    int total_len = 4+payload_len;                  // byte count + net + machine + type + payload
 
     buf[0][0] = total_len;                          // byte count
-    buf[0][1] = (unsigned char)mac;                 // MAC address
-    buf[0][2] = net;                                // SIP network byte
-    buf[0][3] = machine;                            // SIP machine byte
-    buf[0][4] = (unsigned char)pkt_type;            // Packet type
+    buf[0][1] = net;                                // SIP network byte
+    buf[0][2] = machine;                            // SIP machine byte
+    buf[0][3] = (unsigned char)pkt_type;            // Packet type
 
     // Copy payload bytes
-    memcpy(&buf[0][5],payload,payload_len);
+    memcpy(&buf[0][4],payload,payload_len);
 
     return 1; // success
 
+}
+
+void wrapMACFrame(Buffer buf,char dest_mac,char src_mac)
+{
+    int sip_len = buf[0][0];                    // Length of SIP packet
+    
+    // Shift SIP packet bytes 2 positions to right to make place for MAC header
+    for(int i = sip_len ; i >= 1 ; --i){
+        buf[0][i+2] = buf[0][i];
+    }
+
+    buf[0][0] = sip_len+2;                     // Update total length
+
+    // Insert MAC addresses in header
+    buf[0][1] = dest_mac;
+    buf[0][2] = src_mac;
+}
+
+int dataLinkLayerReceive(Buffer buf,char self_mac){
+    int frame_len = buf[0][0];
+    if(frame_len < 6)
+        return 0;                            // Frame too short to cotain MAC+SIP header
+    
+
+    char dest_mac = buf[0][1];
+    char src_mac = buf[0][2];
+
+    if(dest_mac != self_mac && dest_mac != BROADCAST_MAC)
+        return 0;
+    
+    // Shift SIP packet bytes to remove MAC header for network layer processing
+    for(int i = 3;i<frame_len;++i)
+        buf[0][i-2] = buf[0][i];
+    
+    // Update packet length in buffer 
+    buf[0][0] = frame_len -2;
+
+    return 1;               // Packet accepted and ready for network layer 
+}
+
+int networkLayerReceive(Buffer buf)
+{
+    int pkt_len = buf[0][0];
+    if(pkt_len < 4)
+        return 0;                   //Packet too short to be valid SIP packet
+    
+    unsigned char net = buf[0][1];
+    unsigned char machine = buf[0][2];
+    char pkt_type = (char)buf[0][3];
+
+    int payload_len = pkt_len - 4;      // Payload length
+    unsigned char* payload = &buf[0][4];
+
+    // Print packet info per spec or requirments
+    printf("Received SIP Packet: Net=%d, MAchine=%d, Type=%d, PayloadLen=%d\n",net,machine,pkt_type,payload_len);
+
+    for(int i=0;i<payload_len;++i)
+        printf("%02X",payload[i]);
+
+    printf("\n");
+    
+    return 1;       //Sucessfully parsed and printed
+    
 }
 
 void printPacket(Buffer buf,int index){
@@ -71,3 +133,40 @@ void printPacket(Buffer buf,int index){
     }
     printf("\n");
 }
+
+int prob(int percentage){
+    return ((rand() % 100) < percentage);  // returns 1 if event occurs, else 0
+}
+
+void checkAndPrintInBuffer(Buffer buf,int hostNumber){
+    int len = buf[1][0];
+    if(len != 0){
+        // Print message in required format
+        printf("TestP%d received: ",hostNumber);
+        printBuffer("In",buf,1);
+    }
+    buf[1][0] = 0;                        // Clear buffer after processing
+}
+
+void sendRandomPacket(Buffer port,int hostNumber,int numHosts){
+    if(!prob(10)) return;                 // Only 10% chance to send
+
+    unsigned char payload[20];
+    int payload_len = 13 + (rand() % 8);  // Random size: 13-20 bytes
+
+    for(int i = 0 ; i < payload_len ; ++i) payload[i] = rand() % 256;
+
+    char destHost = 'A' + (rand()% numHosts);       // 
+}
+
+void TestPStrip(Buffer buf,char self_mac,unsigned char net,unsigned char machine){
+
+    // 1. Receive and process incoming packets
+    if(dataLinkLayerReceive(buf,self_mac)){         // Check and accept packets addressed to self_mac
+        networkLayerReceive(buf);                   // Parse and print SIP packet
+        clearBuffers(buf);                          // Clear in-buffer after processig
+    }
+
+    // 2. With 10% probability, create and send a new packet
+}
+
