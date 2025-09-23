@@ -168,5 +168,29 @@ void TestPStrip(Buffer buf,char self_mac,unsigned char net,unsigned char machine
     }
 
     // 2. With 10% probability, create and send a new packet
+    if(prob(10)){
+        int payload_len = 13 + (rand() % 8);
+        unsigned char payload[payload_len];
+        
+        // Fill payload with random bytes
+        for(int i = 0 ; i < payload_len;++i)
+            payload[i] = (unsigned char)(rand() % 256);
+        
+        // Choose random destination MAC different from sender
+        char dest_mac;
+        do{
+            dest_mac = 'A' + rand() % 26;
+        }while(dest_mac == self_mac);
+
+        // Create SIP Packet
+        if(createSIPPacket(buf,net,machine,'D',payload,payload_len)){
+            //  Wrap in MAC  frame
+            wrapMACFrame(buf,dest_mac,self_mac);
+
+            // Send packet at physical layer (implement next)
+            physicalLayerSend(buf);
+            printPacket(buf,0);
+        }
+    }
 }
 
