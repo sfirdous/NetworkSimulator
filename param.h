@@ -4,6 +4,7 @@
 #include <time.h>
 
 #define BUFFER_SIZE 256
+#define MAX_HOSTS 26
 #define BROADCAST_MAC '#'
 
 // Packet types
@@ -16,3 +17,13 @@
 
 // Define a port buffer structure d[2][256]
 typedef unsigned char Buffer[2][BUFFER_SIZE];
+
+typedef struct 
+{
+    char mac;                           // Host's MAC address
+    unsigned char net;                  // Host's Network number
+    unsigned char machine;              // Host's Machine number in network
+    Buffer buf;                         // Buffer for packets
+} Host;
+
+
