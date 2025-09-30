@@ -21,7 +21,7 @@ void wrapMACFrame(Host * host,char dest_mac);       // Wrap SIP packet in MAC fr
 
 int prob(int percentage);
 void checkAndPrintInBuffer(Buffer port,int hostNumber);
-void sendRandomPacket(Buffer port,int hostNumber,int numHosts);
+// void sendRandomPacket(Buffer port,int hostNumber,int numHosts);
 
 // Prases the MAC frame at the Data Link Layer 
 // Verifies if the packet is addressed to this host (self_mac)
@@ -35,12 +35,14 @@ int networkLayerReceive(Host *host);
 void physicalLayerSend(Buffer buf);
 
 // TestP strip simulating a host with MAC address self_mac on LAN
-void TestPStrip(Host *host);
+void TestPStrip(Host *host,int num_hosts);
 
 // Simulate physical layer: move out-buffer from sender to dest's in-buffer
 void physicalLayerTransfer(Host host[],int num_hosts);
 
 // Initialize hosts with MAC,network,machine IDS and clear buffers
 void initializeHosts(Host hosts[],int num_hosts);
+
+void lan_connector(Host *hosts,int numhosts);
 
 #endif

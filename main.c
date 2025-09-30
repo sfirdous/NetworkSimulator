@@ -34,6 +34,30 @@ int main()
 
     initializeHosts(hosts,num_hosts);
 
+    // Simulation loop 
+    for(int iter = 0; iter < 20;++iter)
+    {
+        printf("Simulation Iteration %d\n",iter);
+
+        // Fills out-buffers
+        for (int i = 0; i < num_hosts; i++)
+            TestPStrip(&hosts[i],num_hosts);
+        
+        // Print out-buffers
+        for (int i = 0; i < num_hosts; i++)
+            printBuffer("Out",hosts[i]->buf[],0);
+        
+        // LAN transfer
+        lan_connector(hosts,num_hosts);
+
+        // Print in-buffers after LAN
+        for (int i = 0; i < num_hosts; i++)
+            printBuffer("In",hosts[i]->buf,1);
+       
+        
+        physicalLayerTransfer(hosts,num_hosts);
+    }
+    
     
    return 0;
 }
