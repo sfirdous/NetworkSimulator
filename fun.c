@@ -17,15 +17,17 @@ int fillOutBuffer(Buffer buf, int byteCount)
     return byteCount;
 }
 
-void printBuffer(const char *name, Buffer buf, int index) {
-    int count = buf[0];
-    if (count == 0) {
+void printBuffer(const char *name, Buffer buf, int index)
+{
+    int count = buf[index][0];
+    if (count == 0)
+    {
         printf("%s buffer is empty.\n", name);
         return;
     }
     printf("%s buffer has %d bytes: ", name, count);
     for (int i = 1; i <= count; ++i)
-        printf("%02X ", buf[i]);
+        printf("%02X ", buf[index][i]);
     printf("\n");
 }
 
@@ -66,15 +68,17 @@ void wrapMACFrame(Host *host, char dest_mac)
 
 int dataLinkLayerReceive(Host *host)
 {
-    int frame_len = host->buf[0][0];
+    int frame_len = host->buf[1][0];
     if (frame_len < 6)
         return 0; // Frame too short to cotain MAC+SIP header
 
     char dest_mac = host->buf[0][1];
 
     if (dest_mac != host->mac && dest_mac != BROADCAST_MAC)
+    {
+        host->buf[1][0] = 0;
         return 0;
-
+    }
     // Shift SIP packet bytes to remove MAC header for network layer processing
     for (int i = 3; i < frame_len; ++i)
         host->buf[0][i - 2] = host->buf[0][i];
@@ -200,7 +204,7 @@ void TestPStrip(Host *host, int num_hosts)
         } while (dest_mac == host->mac);
 
         // Create SIP Packet
-        if (createSIPPacket(host, 'D', payload, payload_len))
+        if (createSIPPacket(host, 'D', payload, payload_len)) // randomize type of packet
         {
             //  Wrap in MAC  frame
             wrapMACFrame(host, dest_mac);
@@ -260,30 +264,32 @@ void lan_connector(Host *hosts, int numhosts)
             transmitting_hosts++;
             sender_index = i;
         }
-
-        if (transmitting_hosts == 0)
+    }
+    if (transmitting_hosts == 0)
+    {
+        // No transmissions, do nothing
+        return;
+    }
+    else if (transmitting_hosts > 1)
+    {
+        // Collision detected, drop all packets from out-buffers
+        printf("LAN collisin detected! Dropping all outgoing packets this round.\n");
+        for (int i = 0; i < numhosts; i++)
         {
-            // No transmissions, do nothing
-            return;
+            hosts[i].buf[0][0] = 0;
         }
-        else if (transmitting_hosts > 1)
+    }
+    else
+    {
+        for (int i = 0; i < numhosts; ++i)
         {
-            // Collision detected, drop all packets from out-buffers
-            printf("LAN collisin detected! Dropping all outgoing packets this round.\n");
-            for (int i = 0; i < numhosts; i++)
+            if (i != sender_index)
             {
-                hosts[i].buf[0][0] = 0;
+                memcpy(hosts[i].buf[1], hosts[sender_index].buf[0], BUFFER_SIZE);
             }
         }
-        else
-        {
-            for(int i = 0; i < numhosts;++i){
-                if(i != sender_index){
-                    memcpy(hosts[i].buf[1],hosts[sender_index].buf[0],BUFFER_SIZE);
-                }
-                hosts[sender_index].buf[0][0] = 0;
-            }
-            printf("Host %c broadcast its packet to all other hosts.\n",hosts[sender_index].mac);
-        }
+        hosts[sender_index].buf[0][0] = 0;
+
+        printf("Host %c broadcast its packet to all other hosts.\n", hosts[sender_index].mac);
     }
 }
