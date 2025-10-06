@@ -5,7 +5,7 @@
 
 #define BUFFER_SIZE 256
 #define MAX_HOSTS 26
-#define BROADCAST_MAC '#'
+#define BROADCAST_MAC '*'
 
 // Packet types
 #define PKT_ACK 'A'
@@ -24,6 +24,8 @@ typedef struct
     unsigned char net;                  // Host's Network number
     unsigned char machine;              // Host's Machine number in network
     Buffer buf;                         // Buffer for packets
+    int sent;
+    int received;
 } Host;
 
 

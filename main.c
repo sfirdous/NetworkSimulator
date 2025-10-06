@@ -4,62 +4,59 @@
 
 int main()
 {
-    // Buffer port;
-
-    // // clearBuffers(port);
-    // // fillOutBuffer(port,10);
-    // // printBuffer("Out",port,0);
-    // // memcpy(port[1],port[0],port[0][0]+1);
-    // // printBuffer("In",port,1);
-
-    // memset(port,0,BUFFER_SIZE);
-    // unsigned char data[] = {0x11, 0x22, 0x33, 0x44};
-
-
-    // if(createPacket(port,'S',7,4,PKT_DATA,data,sizeof(data))){
-    //     printf("Packet created sucessfully.\n");
-    //     printPacket(port,0);
-    // }else{
-    //     printf("Failed to create packet: payload too large,\n");
-    // }
     srand(time(NULL));
 
     int num_hosts;
-    printf("Enter number of hosts (max %d): ",MAX_HOSTS);
-    scanf("%d",&num_hosts);
-
-    if(num_hosts > MAX_HOSTS) num_hosts = MAX_HOSTS;
+    printf("Enter number of hosts (max %d): ", MAX_HOSTS);
+    scanf("%d", &num_hosts);
+    if (num_hosts > MAX_HOSTS)
+        num_hosts = MAX_HOSTS;
 
     Host hosts[num_hosts];
+    initializeHosts(hosts, num_hosts);
 
-    initializeHosts(hosts,num_hosts);
+    const int SCHED_ITERS = 10;
 
-    // Simulation loop 
-    for(int iter = 0; iter < 5;++iter)
+    // Simulation loop
+    for (int iter = 0; iter < SCHED_ITERS; ++iter)
     {
-        printf("Simulation Iteration %d\n",iter);
+        printf("\n=== Simulation Iteration %d ===\n", iter + 1);
 
-        // Fills out-buffers
+        /* 1. Round robin: each host runs its TestP strip */
         for (int i = 0; i < num_hosts; i++)
-            TestPStrip(&hosts[i],num_hosts);
-        
-        // Print out-buffers
-        for (int i = 0; i < num_hosts; i++){
-            printf("%c: ",hosts[i].mac);
-            printBuffer("Out",hosts[i].buf,0);}
-        
-        // LAN transfer
-        lan_connector(hosts,num_hosts);
+            TestPStrip(&hosts[i], num_hosts);
 
-        // Print in-buffers after LAN
-        for (int i = 0; i < num_hosts; i++){
-            printf("%c: ",hosts[i].mac);
-            printBuffer("In",hosts[i].buf,1);}
-       
-        
-        //physicalLayerTransfer(hosts,num_hosts);
+        /* 2. LAN connector simulates the shared medium */
+        lan_connector(hosts, num_hosts);
+
+        /* 3. Process incoming frames for each host */
+        for (int i = 0; i < num_hosts; i++)
+        {
+            if (hosts[i].buf[1][0] != 0)
+            {
+                if (dataLinkLayerReceive(&hosts[i]))
+                    networkLayerReceive(&hosts[i]);
+                else
+                    clearBuffers(&hosts[i], 1); // not for this host
+            }
+        }
+
+        // /* 4. Print snapshot (after LAN, after processing) */
+        // printf("Snapshot after LAN connector:\n");
+        // for (int i = 0; i < num_hosts; ++i)
+        // {
+        //     printf("%c OUT: ", hosts[i].mac);
+        //     printBuffer("Out", hosts[i].buf, 0);
+        //     printf("%c IN:  ", hosts[i].mac);
+        //     printBuffer("In", hosts[i].buf, 1);
+        // }
     }
-    
-    
-   return 0;
+
+    /* 5. Print summary stats */
+    printf("\n=== Simulation Summary ===\n");
+    for (int i = 0; i < num_hosts; ++i)
+        printf("Host %c: Sent=%d  Received=%d\n",
+               hosts[i].mac, hosts[i].sent, hosts[i].received);
+
+    return 0;
 }
