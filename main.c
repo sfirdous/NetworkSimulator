@@ -2,6 +2,8 @@
 #include <time.h>
 #include "fun.h"
 
+int collision_count = 0; // global counter for LAN collisions
+
 int main()
 {
     srand(time(NULL));
@@ -40,23 +42,14 @@ int main()
                     clearBuffers(&hosts[i], 1); // not for this host
             }
         }
-
-        // /* 4. Print snapshot (after LAN, after processing) */
-        // printf("Snapshot after LAN connector:\n");
-        // for (int i = 0; i < num_hosts; ++i)
-        // {
-        //     printf("%c OUT: ", hosts[i].mac);
-        //     printBuffer("Out", hosts[i].buf, 0);
-        //     printf("%c IN:  ", hosts[i].mac);
-        //     printBuffer("In", hosts[i].buf, 1);
-        // }
     }
 
     /* 5. Print summary stats */
     printf("\n=== Simulation Summary ===\n");
     for (int i = 0; i < num_hosts; ++i)
-        printf("Host %c: Sent=%d  Received=%d\n",
-               hosts[i].mac, hosts[i].sent, hosts[i].received);
+        printf("Host %c: Sent=%d  Received=%d\n", hosts[i].mac, hosts[i].sent, hosts[i].received);
+
+    printf("Total LAN Collisions Detected: %d\n", collision_count);
 
     return 0;
 }

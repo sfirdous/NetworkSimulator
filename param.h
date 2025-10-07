@@ -14,9 +14,16 @@
 #define PKT_CONTROL 'C'
 #define PKT_ARP_REQ 'L'
 #define PKT_ARP_REPLY 'R'
+#define MAX_ARP_ENTRIES 10
 
 // Define a port buffer structure d[2][256]
 typedef unsigned char Buffer[2][BUFFER_SIZE];
+
+typedef struct{
+    unsigned char net;
+    unsigned char machine;
+    char mac;
+}ArpEntry;
 
 typedef struct 
 {
@@ -26,6 +33,8 @@ typedef struct
     Buffer buf;                         // Buffer for packets
     int sent;
     int received;
+    ArpEntry arp_table[MAX_ARP_ENTRIES];
+    int arp_count;
 } Host;
 
 

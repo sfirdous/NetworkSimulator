@@ -50,7 +50,8 @@ int createSIPPacket(Host *host, char pkt_type, unsigned char *payload, int paylo
 void wrapMACFrame(Host *host, char dest_mac)
 {
     int sip_len = host->buf[0][0]; // Length of SIP packet
-    if (sip_len <= 0)   return;
+    if (sip_len <= 0)
+        return;
 
     // Shift SIP packet bytes 2 positions to right to make place for MAC header
     for (int i = sip_len; i >= 1; --i)
@@ -69,7 +70,7 @@ void wrapMACFrame(Host *host, char dest_mac)
 int dataLinkLayerReceive(Host *host)
 {
     int frame_len = host->buf[1][0];
-    if (frame_len < 4)
+    if (frame_len < 5)
         return 0; // Frame too short to cotain MAC+SIP header
 
     char dest_mac = host->buf[1][1];
@@ -80,11 +81,12 @@ int dataLinkLayerReceive(Host *host)
         return 0;
     }
     // Shift SIP packet bytes to remove MAC header for network layer processing
-    for (int i = 3; i < frame_len; ++i)
-        host->buf[0][i - 2] = host->buf[0][i];
+    int new_len = frame_len -2;
+    for (int i = 1; i <= new_len; ++i)
+        host->buf[0][i] = host->buf[1][i+2];
 
     // Update packet length in buffer
-    host->buf[0][0] = frame_len - 2;
+    host->buf[0][0] = new_len;
 
     // clear in-buffer
     host->buf[1][0] = 0;
@@ -106,14 +108,26 @@ int networkLayerReceive(Host *host)
     unsigned char *payload = &host->buf[0][4];
 
     // Print packet info per spec or requirments
-    printf("Received SIP Packet: Net=%d, MAchine=%d, Type=%d, PayloadLen=%d\n", net, machine, pkt_type, payload_len);
+    printf("Host %c: Received SIP packet -> SIP=(%d,%d) Type=%c PayloadLen=%d Data=",
+           host->mac, net, machine, pkt_type, payload_len);
 
     for (int i = 0; i < payload_len; ++i)
-        printf("%02X", payload[i]);
+        printf("%02X ", payload[i]);
 
     printf("\n");
 
     host->received += 1;
+
+    if (pkt_type == 'D'){
+
+        char dest_mac = 'A' + (machine-1);
+
+        unsigned char ack_payload[1] = {0xAC};
+        if(createSIPPacket(host,'A',ack_payload,1)){
+            wrapMACFrame(host,dest_mac);
+            printf("Host %c: Sending ACK to Host %c\n",host->mac,dest_mac);
+        }
+    }
 
     // after processing, clear out buf
     host->buf[0][0] = 0;
@@ -153,6 +167,9 @@ void printPacket(Buffer buf, int index)
 
 void TestPStrip(Host *host, int num_hosts)
 {
+
+    // Dont generate a new message if an ACK or pending frame is waiting
+    if(host->buf[0][0] != 0) return;
 
     // 1. Receive and process incoming packets
     if (host->buf[1][0] != 0)
@@ -231,6 +248,7 @@ void lan_connector(Host *hosts, int numhosts)
     {
         // Collision detected, drop all packets from out-buffers
         printf("LAN collisin detected! Dropping all outgoing packets this round.\n");
+        collision_count++;
         for (int i = 0; i < numhosts; i++)
         {
             hosts[i].buf[0][0] = 0;
@@ -294,12 +312,19 @@ void initializeHosts(Host hosts[], int num_hosts)
     for (int i = 0; i < num_hosts; ++i)
     {
         hosts[i].mac = (char)('A' + i);
-        hosts[i].net = 1;           // Static net
-        hosts[i].machine = (unsigned char)(i + 1);   // Unique machine number
-        clearBuffers(&hosts[i], 0); // Clear out-buffer
-        clearBuffers(&hosts[i], 1); // Clear in-buffer
+        hosts[i].net = 1;                          // Static net
+        hosts[i].machine = (unsigned char)(i + 1); // Unique machine number
+        clearBuffers(&hosts[i], 0);                // Clear out-buffer
+        clearBuffers(&hosts[i], 1);                // Clear in-buffer
         hosts[i].sent = 0;
         hosts[i].received = 0;
         printf("Host %c initialized: Network %d, Machine %d\n", hosts[i].mac, hosts[i].net, hosts[i].machine);
+
+        hosts[i].arp_count = 0;
+        for(int j = 0 ; j < MAX_ARP_ENTRIES ; ++j){
+            hosts[i].arp_table[j].net = 0;
+            hosts[i].arp_table[j].machine = 0;
+            hosts[i].arp_table[j].mac = 0;
+        }
     }
 }

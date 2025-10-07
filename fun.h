@@ -3,6 +3,7 @@
 
 #include "param.h"
 
+extern int collision_count;
 
 /* utilities */
 void printBuffer(const char* name,Buffer buf,int index);  // Function to print contents of both buffers
@@ -33,10 +34,49 @@ void physicalLayerSend(Buffer buf);
 // Simulate physical layer: move out-buffer from sender to dest's in-buffer
 void physicalLayerTransfer(Host host[],int num_hosts);
 
-
 /* initialization*/
 // Initialize hosts with MAC,network,machine IDS and clear buffers
 void initializeHosts(Host hosts[],int num_hosts);
 
+// Look up MAC from ARP table
+char lookupARP(Host *host,unsigned char net,unsigned char machine){
+    for (int i = 0; i < host->arp_count; i++)
+    {
+        if(host->arp_table[i].net == net && host->arp_table[i].machine == machine)
+            return host->arp_table[i].mac;
+    }
+
+    return 0;
+}
+
+// Add or update entry in ARP table
+void updateARP(Host *host,unsigned char net,unsigned char machine,char mac)
+{
+    for (int i = 0; i < host->arp_count; i++)
+    {
+        if(host->arp_table[i].net == net && host->arp_table[i].machine == machine)
+        {
+            host->arp_table[i].mac == mac;
+            return;
+        }
+        if(host->arp_count < MAX_ARP_ENTRIES)
+        {
+            host->arp_table[host->arp_count].net = net;
+            host->arp_table[host->arp_count].machine = machine;
+            host->arp_table[host->arp_count].mac = mac;
+        }
+    }
+    
+}
+
+void printARPTable(Host *host)
+{
+    printf("ARP Table for Host %c:\n",host->mac);
+    for(int i = 0;i < host->arp_count;++i)
+        printf(" (%d,%d) -> %c\n",
+        host->arp_table[i].net,
+        host->arp_table[i].machine,
+        host->arp_table[i].mac);
+}
 
 #endif
