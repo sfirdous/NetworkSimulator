@@ -118,7 +118,32 @@ int networkLayerReceive(Host *host)
 
     host->received += 1;
 
-    if (pkt_type == 'D'){
+    if(pkt_type == PKT_ARP_REQ){
+        unsigned char req_net = payload[0];
+        unsigned char req_machine = payload[1];
+
+        if(req_net == host->net && req_machine == host->machine){
+            printf("Host %c: Received APR Request from (%d,%d). Sendig ARP Reply.\n",host->mac,net,machine);
+
+            unsigned char reply_payload[3] = {host->net,host->machine,host->mac};
+            if(createSIPPacket(host,PKT_ARP_REPLY,reply_payload,3)){
+                char dest_mac = 'A' + (machine-1);
+                wrapMACFrame(host,dest_mac);
+            }
+        }
+    }
+
+    else if(pkt_type == PKT_ARP_REPLY){
+        unsigned char reply_net = payload[0];
+        unsigned char reply_machine = payload[1];
+
+        char reply_mac = payload[2];
+        printf("Host %c: Received ARP Reply -> (%d,%d) is at MAC = %c\n",host->mac,reply_net,reply_machine,reply_mac);
+
+        updateARP(host,reply_net,reply_machine,reply_mac);
+    }
+
+    if (pkt_type == PKT_DATA){
 
         char dest_mac = 'A' + (machine-1);
 
@@ -198,10 +223,23 @@ void TestPStrip(Host *host, int num_hosts)
         dest_index = rand() % num_hosts;
     } while ((char)('A' + dest_index) == host->mac);
 
-    char dest_mac = (char)('A' + dest_index);
+    unsigned char dest_net = host->net;
+    unsigned char dest_machine = dest_index + 1;
+
+    char dest_mac = lookupARP(host,dest_net,dest_machine);
+
+    if(!dest_mac){
+        unsigned char arp_payload[2] = {dest_net,dest_machine};
+        if(createSIPPacket(host,PKT_ARP_REQ,arp_payload,2)){
+            wrapMACFrame(host,BROADCAST_MAC);
+            printf("Host %c: Unknown MAC for (%d,%d). Sending ARP Request.\n",
+                   host->mac, dest_net, dest_machine);
+        }
+        return;
+    }
 
     // Create SIP Packet
-    if (createSIPPacket(host, 'D', payload, payload_len)) // randomize type of packet
+    if (createSIPPacket(host, PKT_DATA, payload, payload_len)) // randomize type of packet
     {
         //  Wrap in MAC  frame
         wrapMACFrame(host, dest_mac);
@@ -327,4 +365,45 @@ void initializeHosts(Host hosts[], int num_hosts)
             hosts[i].arp_table[j].mac = 0;
         }
     }
+}
+
+// Look up MAC from ARP table
+char lookupARP(Host *host,unsigned char net,unsigned char machine){
+    for (int i = 0; i < host->arp_count; i++)
+    {
+        if(host->arp_table[i].net == net && host->arp_table[i].machine == machine)
+            return host->arp_table[i].mac;
+    }
+
+    return 0;
+}
+
+// Add or update entry in ARP table
+void updateARP(Host *host,unsigned char net,unsigned char machine,char mac)
+{
+    for (int i = 0; i < host->arp_count; i++)
+    {
+        if(host->arp_table[i].net == net && host->arp_table[i].machine == machine)
+        {
+            host->arp_table[i].mac = mac;
+            return;
+        }
+        if(host->arp_count < MAX_ARP_ENTRIES)
+        {
+            host->arp_table[host->arp_count].net = net;
+            host->arp_table[host->arp_count].machine = machine;
+            host->arp_table[host->arp_count].mac = mac;
+        }
+    }
+    
+}
+
+void printARPTable(Host *host)
+{
+    printf("ARP Table for Host %c:\n",host->mac);
+    for(int i = 0;i < host->arp_count;++i)
+        printf(" (%d,%d) -> %c\n",
+        host->arp_table[i].net,
+        host->arp_table[i].machine,
+        host->arp_table[i].mac);
 }
