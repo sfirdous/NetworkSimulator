@@ -35,6 +35,7 @@ typedef struct
     int received;
     ArpEntry arp_table[MAX_ARP_ENTRIES];
     int arp_count;
+    int speed;                          // Host's speed factor
 } Host;
 
 

@@ -81,9 +81,9 @@ int dataLinkLayerReceive(Host *host)
         return 0;
     }
     // Shift SIP packet bytes to remove MAC header for network layer processing
-    int new_len = frame_len -2;
+    int new_len = frame_len - 2;
     for (int i = 1; i <= new_len; ++i)
-        host->buf[0][i] = host->buf[1][i+2];
+        host->buf[0][i] = host->buf[1][i + 2];
 
     // Update packet length in buffer
     host->buf[0][0] = new_len;
@@ -118,39 +118,50 @@ int networkLayerReceive(Host *host)
 
     host->received += 1;
 
-    if(pkt_type == PKT_ARP_REQ){
+    if (pkt_type == PKT_ARP_REQ)
+    {
         unsigned char req_net = payload[0];
         unsigned char req_machine = payload[1];
 
-        if(req_net == host->net && req_machine == host->machine){
-            printf("Host %c: Received APR Request from (%d,%d). Sendig ARP Reply.\n",host->mac,net,machine);
+        if (req_net == host->net && req_machine == host->machine)
+        {
+            printf("Host %c: Received APR Request from (%d,%d). Sendig ARP Reply.\n", host->mac, net, machine);
 
-            unsigned char reply_payload[3] = {host->net,host->machine,host->mac};
-            if(createSIPPacket(host,PKT_ARP_REPLY,reply_payload,3)){
-                char dest_mac = 'A' + (machine-1);
-                wrapMACFrame(host,dest_mac);
+            unsigned char reply_payload[3] = {host->net, host->machine, host->mac};
+            if (createSIPPacket(host, PKT_ARP_REPLY, reply_payload, 3))
+            {
+                char dest_mac = 'A' + (machine - 1);
+                wrapMACFrame(host, dest_mac);
+                host->sent++;
             }
         }
     }
 
-    else if(pkt_type == PKT_ARP_REPLY){
+    else if (pkt_type == PKT_ARP_REPLY)
+    {
         unsigned char reply_net = payload[0];
         unsigned char reply_machine = payload[1];
 
         char reply_mac = payload[2];
-        printf("Host %c: Received ARP Reply -> (%d,%d) is at MAC = %c\n",host->mac,reply_net,reply_machine,reply_mac);
+        printf("Host %c: Received ARP Reply -> (%d,%d) is at MAC = %c\n", host->mac, reply_net, reply_machine, reply_mac);
 
-        updateARP(host,reply_net,reply_machine,reply_mac);
+        updateARP(host, reply_net, reply_machine, reply_mac);
     }
 
-    if (pkt_type == PKT_DATA){
+    if (pkt_type == PKT_DATA)
+    {
 
-        char dest_mac = 'A' + (machine-1);
+        char dest_mac = lookupARP(host,net,machine);
+        if(dest_mac == 0){
+            dest_mac = 'A' + (machine-1);
+        }
 
         unsigned char ack_payload[1] = {0xAC};
-        if(createSIPPacket(host,'A',ack_payload,1)){
-            wrapMACFrame(host,dest_mac);
-            printf("Host %c: Sending ACK to Host %c\n",host->mac,dest_mac);
+        if (createSIPPacket(host, 'A', ack_payload, 1))
+        {
+            wrapMACFrame(host, dest_mac);
+            host->sent++;
+            printf("Host %c: Sending ACK to Host %c\n", host->mac, dest_mac);
         }
     }
 
@@ -194,7 +205,8 @@ void TestPStrip(Host *host, int num_hosts)
 {
 
     // Dont generate a new message if an ACK or pending frame is waiting
-    if(host->buf[0][0] != 0) return;
+    if (host->buf[0][0] != 0)
+        return;
 
     // 1. Receive and process incoming packets
     if (host->buf[1][0] != 0)
@@ -204,7 +216,7 @@ void TestPStrip(Host *host, int num_hosts)
     }
 
     // 2. With 10% probability, create and send a new packet
-    if (!prob(10))
+    if (!prob(10 * host->speed / 3)) // faster hosts have higher chace to send
         return;
 
     int payload_len = 13 + (rand() % 8);
@@ -226,12 +238,15 @@ void TestPStrip(Host *host, int num_hosts)
     unsigned char dest_net = host->net;
     unsigned char dest_machine = dest_index + 1;
 
-    char dest_mac = lookupARP(host,dest_net,dest_machine);
+    char dest_mac = lookupARP(host, dest_net, dest_machine);
 
-    if(!dest_mac){
-        unsigned char arp_payload[2] = {dest_net,dest_machine};
-        if(createSIPPacket(host,PKT_ARP_REQ,arp_payload,2)){
-            wrapMACFrame(host,BROADCAST_MAC);
+    if (!dest_mac)
+    {
+        unsigned char arp_payload[2] = {dest_net, dest_machine};
+        if (createSIPPacket(host, PKT_ARP_REQ, arp_payload, 2))
+        {
+            wrapMACFrame(host, BROADCAST_MAC);
+            host->sent++;
             printf("Host %c: Unknown MAC for (%d,%d). Sending ARP Request.\n",
                    host->mac, dest_net, dest_machine);
         }
@@ -243,7 +258,7 @@ void TestPStrip(Host *host, int num_hosts)
     {
         //  Wrap in MAC  frame
         wrapMACFrame(host, dest_mac);
-        host->sent += 1;
+        host->sent++;
 
         // human-readable message
         // Send packet at physical layer (implement next)
@@ -288,33 +303,61 @@ void lan_connector(Host *hosts, int numhosts)
         printf("LAN collisin detected! Dropping all outgoing packets this round.\n");
         collision_count++;
         for (int i = 0; i < numhosts; i++)
-        {
             hosts[i].buf[0][0] = 0;
-        }
+        return;
     }
-    else
+
+    Host *sender = &hosts[sender_index];
+    unsigned char *frame = sender->buf[0];
+    int frame_len = frame[0];
+    char dest_mac = (char)frame[1];
+
+    if (dest_mac == BROADCAST_MAC)
     {
-        Host *sender = &hosts[sender_index];
-        int frame_len = sender->buf[0][0];
+        printf("Host %c broadcast its packet to all other hosts.\n", sender->mac);
+
         for (int i = 0; i < numhosts; ++i)
         {
             if (i == sender_index)
                 continue;
+
             if (hosts[i].buf[1][0] == 0)
             {
-                // copy full frame icluding bytecount
                 int upto = (frame_len < BUFFER_SIZE) ? frame_len : BUFFER_SIZE - 1;
                 for (int j = 0; j <= upto; ++j)
-                    hosts[i].buf[1][j] = sender->buf[0][j];
+                    hosts[i].buf[1][j] = frame[j];
             }
             else
             {
+                printf("LAN Warning: Host %c input buffer full! Dropping packet.\n", hosts[i].mac);
             }
         }
-        printf("Host %c broadcast its packet to all other hosts.\n", sender->mac);
-        // clear senders out-bufferr
-        sender->buf[0][0] = 0;
     }
+    else // Unicast frame
+    {
+
+        for (int i = 0; i < numhosts; ++i)
+        {
+            if (hosts[i].mac == dest_mac)
+            {
+                if (hosts[i].buf[1][0] == 0)
+                {
+                    int upto = (frame_len < BUFFER_SIZE) ? frame_len : BUFFER_SIZE - 1;
+                    for (int j = 0; j <= upto; ++j)
+                        hosts[i].buf[1][j] = frame[j];
+                    printf("Host %c sent frame directly to Host %c.\n", sender->mac, hosts[i].mac);
+                }
+                else
+                {
+                    printf("LAN Warning: Host %c input buffer full! Dropping unicast packet.\n", hosts[i].mac);
+                }
+                break; // stop sfter finding target
+            }
+        }
+    }
+
+    // clear senders out-buffer
+    sender->buf[0][0] = 0;
 }
 
 void physicalLayerSend(Buffer buf)
@@ -356,10 +399,12 @@ void initializeHosts(Host hosts[], int num_hosts)
         clearBuffers(&hosts[i], 1);                // Clear in-buffer
         hosts[i].sent = 0;
         hosts[i].received = 0;
+        hosts[i].speed = 1 + rand() % 5;
         printf("Host %c initialized: Network %d, Machine %d\n", hosts[i].mac, hosts[i].net, hosts[i].machine);
 
         hosts[i].arp_count = 0;
-        for(int j = 0 ; j < MAX_ARP_ENTRIES ; ++j){
+        for (int j = 0; j < MAX_ARP_ENTRIES; ++j)
+        {
             hosts[i].arp_table[j].net = 0;
             hosts[i].arp_table[j].machine = 0;
             hosts[i].arp_table[j].mac = 0;
@@ -368,10 +413,11 @@ void initializeHosts(Host hosts[], int num_hosts)
 }
 
 // Look up MAC from ARP table
-char lookupARP(Host *host,unsigned char net,unsigned char machine){
+char lookupARP(Host *host, unsigned char net, unsigned char machine)
+{
     for (int i = 0; i < host->arp_count; i++)
     {
-        if(host->arp_table[i].net == net && host->arp_table[i].machine == machine)
+        if (host->arp_table[i].net == net && host->arp_table[i].machine == machine)
             return host->arp_table[i].mac;
     }
 
@@ -379,31 +425,30 @@ char lookupARP(Host *host,unsigned char net,unsigned char machine){
 }
 
 // Add or update entry in ARP table
-void updateARP(Host *host,unsigned char net,unsigned char machine,char mac)
+void updateARP(Host *host, unsigned char net, unsigned char machine, char mac)
 {
     for (int i = 0; i < host->arp_count; i++)
     {
-        if(host->arp_table[i].net == net && host->arp_table[i].machine == machine)
+        if (host->arp_table[i].net == net && host->arp_table[i].machine == machine)
         {
             host->arp_table[i].mac = mac;
             return;
         }
-        if(host->arp_count < MAX_ARP_ENTRIES)
+        if (host->arp_count < MAX_ARP_ENTRIES)
         {
             host->arp_table[host->arp_count].net = net;
             host->arp_table[host->arp_count].machine = machine;
             host->arp_table[host->arp_count].mac = mac;
         }
     }
-    
 }
 
 void printARPTable(Host *host)
 {
-    printf("ARP Table for Host %c:\n",host->mac);
-    for(int i = 0;i < host->arp_count;++i)
+    printf("ARP Table for Host %c:\n", host->mac);
+    for (int i = 0; i < host->arp_count; ++i)
         printf(" (%d,%d) -> %c\n",
-        host->arp_table[i].net,
-        host->arp_table[i].machine,
-        host->arp_table[i].mac);
+               host->arp_table[i].net,
+               host->arp_table[i].machine,
+               host->arp_table[i].mac);
 }
