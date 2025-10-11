@@ -47,24 +47,23 @@ int createSIPPacket(Host *host, char pkt_type, unsigned char *payload, int paylo
     return 1; // success
 }
 
-void wrapMACFrame(Host *host, char dest_mac)
+int wrapMACFrame(Host *host, char dest_mac)
 {
     int sip_len = host->buf[0][0]; // Length of SIP packet
-    if (sip_len <= 0)
-        return;
+    if (sip_len + 2 >= BUFFER_SIZE)
+        return 0;
 
     // Shift SIP packet bytes 2 positions to right to make place for MAC header
     for (int i = sip_len; i >= 1; --i)
-    {
-        if (i + 2 < BUFFER_SIZE)
             host->buf[0][i + 2] = host->buf[0][i];
-    }
 
     host->buf[0][0] = sip_len + 2; // Update total length
 
     // Insert MAC addresses in header
     host->buf[0][1] = dest_mac;
     host->buf[0][2] = host->mac;
+
+    return 1;
 }
 
 int dataLinkLayerReceive(Host *host)
@@ -107,6 +106,8 @@ int networkLayerReceive(Host *host)
     int payload_len = pkt_len - 4; // Payload length
     unsigned char *payload = &host->buf[0][4];
 
+    // if(payload_len < 3) return 0;
+
     // Print packet info per spec or requirments
     printf("Host %c: Received SIP packet -> SIP=(%d,%d) Type=%c PayloadLen=%d Data=",
            host->mac, net, machine, pkt_type, payload_len);
@@ -125,7 +126,7 @@ int networkLayerReceive(Host *host)
 
         if (req_net == host->net && req_machine == host->machine)
         {
-            printf("Host %c: Received APR Request from (%d,%d). Sendig ARP Reply.\n", host->mac, net, machine);
+            printf("Host %c: Received ARP Request from (%d,%d). Sendig ARP Reply.\n", host->mac, net, machine);
 
             unsigned char reply_payload[3] = {host->net, host->machine, host->mac};
             if (createSIPPacket(host, PKT_ARP_REPLY, reply_payload, 3))
@@ -150,10 +151,24 @@ int networkLayerReceive(Host *host)
 
     if (pkt_type == PKT_DATA)
     {
-
+        // Try to find destination MAC for the sender
         char dest_mac = lookupARP(host,net,machine);
         if(dest_mac == 0){
-            dest_mac = 'A' + (machine-1);
+           printf("Host %c: Unknown MAC for (%d,%d). Sending ARP Request.\n",
+               host->mac, net, machine);
+
+        // Create ARP Request payload: [target_net, target_machine]
+        unsigned char arp_payload[2] = {net, machine};
+
+        // Build and broadcast ARP Request
+        if (createSIPPacket(host, PKT_ARP_REQ, arp_payload, 2))
+        {
+            wrapMACFrame(host, BROADCAST_MAC);
+            host->sent++;
+        }
+
+        // Don’t send ACK yet — wait until ARP Reply arrives
+        return 0;
         }
 
         unsigned char ack_payload[1] = {0xAC};
@@ -434,13 +449,14 @@ void updateARP(Host *host, unsigned char net, unsigned char machine, char mac)
             host->arp_table[i].mac = mac;
             return;
         }
+    }
         if (host->arp_count < MAX_ARP_ENTRIES)
         {
             host->arp_table[host->arp_count].net = net;
             host->arp_table[host->arp_count].machine = machine;
             host->arp_table[host->arp_count].mac = mac;
         }
-    }
+    
 }
 
 void printARPTable(Host *host)

@@ -13,7 +13,7 @@ void clearBuffers(Host *host,int index);                  // Function to clear b
 
 /*Packet creation/encapsulation */
 int createSIPPacket(Host* host,char pkt_type,unsigned char* payload,int payload_len); 
-void wrapMACFrame(Host * host,char dest_mac);       // Wrap SIP packet in MAC frame at Data Link layer
+int wrapMACFrame(Host * host,char dest_mac);       // Wrap SIP packet in MAC frame at Data Link layer
 
 /* Layers */
 int dataLinkLayerReceive(Host* host);
