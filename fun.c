@@ -119,6 +119,14 @@ int networkLayerReceive(Host *host)
 
     host->received += 1;
 
+    // Store sender info before clearing buffer (needed for responses)
+    unsigned char sender_net = net;
+    unsigned char sender_machine = machine;
+    
+    // Clear the processed packet buffer BEFORE creating response
+    // (Response will overwrite buf[0] anyway)
+    host->buf[0][0] = 0;
+
     if (pkt_type == PKT_ARP_REQ)
     {
         if (payload_len < 2) return 0;
@@ -127,12 +135,12 @@ int networkLayerReceive(Host *host)
 
         if (req_net == host->net && req_machine == host->machine)
         {
-            printf("Host %c: Received ARP Request from (%d,%d). Sendig ARP Reply.\n", host->mac, net, machine);
+            printf("Host %c: Received ARP Request from (%d,%d). Sendig ARP Reply.\n", host->mac, sender_net, sender_machine);
 
             unsigned char reply_payload[3] = {host->net, host->machine, host->mac};
             if (createSIPPacket(host, PKT_ARP_REPLY, reply_payload, 3))
             {
-                char dest_mac = 'A' + (machine - 1);
+                char dest_mac = 'A' + (sender_machine - 1);
                 wrapMACFrame(host, dest_mac);
                 host->sent++;
                 printf("Host %c: Sending ARP Reply to Host %c.\n", host->mac, dest_mac);
@@ -155,14 +163,14 @@ int networkLayerReceive(Host *host)
     if (pkt_type == PKT_DATA)
     {
         // Try to find destination MAC for the sender
-        char dest_mac = lookupARP(host, net, machine);
+        char dest_mac = lookupARP(host, sender_net, sender_machine);
         if (dest_mac == 0)
         {
             printf("Host %c: Unknown MAC for (%d,%d). Sending ARP Request.\n",
-                   host->mac, net, machine);
+                   host->mac, sender_net, sender_machine);
 
             // Create ARP Request payload: [target_net, target_machine]
-            unsigned char arp_payload[2] = {net, machine};
+            unsigned char arp_payload[2] = {sender_net, sender_machine};
 
             // Build and broadcast ARP Request
             if (createSIPPacket(host, PKT_ARP_REQ, arp_payload, 2))
@@ -181,12 +189,10 @@ int networkLayerReceive(Host *host)
             wrapMACFrame(host, dest_mac);
             host->sent++;
             printf("Host %c: Sending ACK to Host %c\n", host->mac, dest_mac);
-        }
+        }        
     }
 
-    // after processing, input out buf
-    host->buf[1][0] = 0;
-
+    
     return 1; // Sucessfully parsed and printed
 }
 
@@ -331,7 +337,7 @@ void lan_connector(Host *hosts, int numhosts)
 
     if (dest_mac == BROADCAST_MAC)
     {
-        printf("Host %c broadcast its packet to all other hosts.\n", sender->mac);
+        // printf("Host %c broadcast its packet to all other hosts.\n", sender->mac);
 
         for (int i = 0; i < numhosts; ++i)
         {
@@ -342,7 +348,7 @@ void lan_connector(Host *hosts, int numhosts)
             for (int j = 0; j <= upto; ++j)
                 hosts[i].buf[1][j] = frame[j];
 
-            printf("Host %c received broadcast frame from Host %c.\n", hosts[i].mac, sender->mac);
+            // printf("Host %c received broadcast frame from Host %c.\n", hosts[i].mac, sender->mac);
         }
     }
     else // Unicast frame

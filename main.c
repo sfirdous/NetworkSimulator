@@ -17,7 +17,7 @@ int main()
     Host hosts[num_hosts];
     initializeHosts(hosts, num_hosts);
 
-    const int SCHED_ITERS = 10;
+    const int SCHED_ITERS = 30;
 
     // Simulation loop
     for (int iter = 0; iter < SCHED_ITERS; ++iter)
@@ -42,6 +42,7 @@ int main()
                     clearBuffers(&hosts[i], 1); // not for this host
             }
         }
+
     }
 
     /* 5. Print summary stats */
@@ -50,6 +51,10 @@ int main()
         printf("Host %c: Sent=%d  Received=%d\n", hosts[i].mac, hosts[i].sent, hosts[i].received);
 
     printf("Total LAN Collisions Detected: %d\n", collision_count);
+
+    printf("\n=== ARP Tables ===\n");
+        for (int i = 0; i < num_hosts; ++i) printARPTable(&hosts[i]);
+
 
     return 0;
 }
