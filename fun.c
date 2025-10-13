@@ -120,9 +120,17 @@ int networkLayerReceive(Host *host)
     host->received += 1;
 
     // Store sender info before clearing buffer (needed for responses)
+    unsigned int received_msgid = 0;
     unsigned char sender_net = net;
     unsigned char sender_machine = machine;
     
+    if(pkt_type == PKT_DATA && payload_len >=4)
+    {
+        for(int k = 0 ; k < 4 && k < payload_len;++k)
+            received_msgid = (received_msgid << 8) | payload[k];
+
+        printf("TestP%c received %u\n", host->mac, received_msgid);
+    }
     // Clear the processed packet buffer BEFORE creating response
     // (Response will overwrite buf[0] anyway)
     host->buf[0][0] = 0;
@@ -233,14 +241,14 @@ void TestPStrip(Host *host, int num_hosts)
     if (host->buf[0][0] != 0)
         return;
 
-    // 1. Receive and process incoming packets
-    if (host->buf[1][0] != 0)
-    {
-        printf("TestP%c received: ", host->mac);
-        printBuffer("In", host->buf, 1);
-    }
+    // // 1. Receive and process incoming packets
+    // if (host->buf[1][0] != 0)
+    // {
+    //     printf("TestP%c received: ", host->mac);
+    //     printBuffer("In", host->buf, 1);
+    // }
 
-    // 2. With 10% probability, create and send a new packet
+    // With 10% probability, create and send a new packet
     if (!prob(10 * host->speed / 3)) // faster hosts have higher chace to send
         return;
 
