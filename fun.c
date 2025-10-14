@@ -123,10 +123,10 @@ int networkLayerReceive(Host *host)
     unsigned int received_msgid = 0;
     unsigned char sender_net = net;
     unsigned char sender_machine = machine;
-    
-    if(pkt_type == PKT_DATA && payload_len >=4)
+
+    if (pkt_type == PKT_DATA && payload_len >= 4)
     {
-        for(int k = 0 ; k < 4 && k < payload_len;++k)
+        for (int k = 0; k < 4 && k < payload_len; ++k)
             received_msgid = (received_msgid << 8) | payload[k];
 
         printf("TestP%c received %u\n", host->mac, received_msgid);
@@ -135,9 +135,11 @@ int networkLayerReceive(Host *host)
     // (Response will overwrite buf[0] anyway)
     host->buf[0][0] = 0;
 
+    // Handle ARP Request (Type L)
     if (pkt_type == PKT_ARP_REQ)
     {
-        if (payload_len < 2) return 0;
+        if (payload_len < 2)
+            return 0;
         unsigned char req_net = payload[0];
         unsigned char req_machine = payload[1];
 
@@ -156,9 +158,11 @@ int networkLayerReceive(Host *host)
         }
     }
 
+    // handle ARP Reply (Type R)
     else if (pkt_type == PKT_ARP_REPLY)
     {
-        if(payload_len < 3) return 0;
+        if (payload_len < 3)
+            return 0;
         unsigned char reply_net = payload[0];
         unsigned char reply_machine = payload[1];
 
@@ -168,7 +172,8 @@ int networkLayerReceive(Host *host)
         updateARP(host, reply_net, reply_machine, reply_mac);
     }
 
-    if (pkt_type == PKT_DATA)
+    // handle Data packet (Type D)
+    else if (pkt_type == PKT_DATA)
     {
         // Try to find destination MAC for the sender
         char dest_mac = lookupARP(host, sender_net, sender_machine);
@@ -197,10 +202,78 @@ int networkLayerReceive(Host *host)
             wrapMACFrame(host, dest_mac);
             host->sent++;
             printf("Host %c: Sending ACK to Host %c\n", host->mac, dest_mac);
-        }        
+        }
     }
 
-    
+    // handle broadcast packet (Type B)
+    else if (pkt_type == PKT_BROADCAST)
+    {
+        printf("Host %c: Received BROADCAST message from (%d,%d)\n", host->mac, sender_net, sender_machine);
+
+        if (payload_len >= 4)
+        {
+            unsigned int broadcast_msgid = 0;
+            for (int k = 0; k < 4 && k < payload_len; ++k)
+                broadcast_msgid = (broadcast_msgid << 8) | payload[k];
+
+            printf("TestP%c received broadcast message %u from TestP%c\n", host->mac, broadcast_msgid, 'A' + (sender_machine - 1));
+        }
+    }
+
+    // handle control packet (Type C)
+    else if (pkt_type == PKT_CONTROL)
+    {
+        printf("Host %c: Recived CONTROL packet from (%d,%d)\n", host->mac, sender_net, sender_machine);
+
+        // Control packets could be sed for:
+        // flow control (stop/start sending)
+        // network managment
+        // congiguration
+
+        if (payload_len >= 1)
+        {
+            unsigned char control_cmd = payload[0];
+
+            switch (control_cmd)
+            {
+            case 0x01:
+                printf("Host %c: Control Command = PAUSE TRANSMISSION\n", host->mac);
+                break;
+            case 0x02:
+                printf("Host %c: Control Command = RESUME TRANSMISSION\n", host->mac);
+                break;
+            case 0x03:
+                printf("Host %c: Control Command = RESET TRANSMISSION\n", host->mac);
+                break;
+            case 0xFF:
+                printf("Host %c: Control Command = NETWORK STATUS REQUEST\n", host->mac);
+                break;
+            default:
+                printf("Host %c: Control Command = UNKNOWN (0x%02X)\n", host->mac, control_cmd);
+                break;
+            }
+        }
+    }
+
+    // send ack for control packets
+    char dest_mac = lookupARP(host, sender_net, sender_machine);
+    if (dest_mac != 0)
+    {
+        unsigned char ack_payload[1] = {0xCC}; // control ack
+        if (createSIPPacket(host, PKT_ACK, ack_payload, 1))
+        {
+            wrapMACFrame(host, dest_mac);
+            host->sent++;
+            printf("Host %c: Sending Control ACK to Host %c\n", host->mac, dest_mac);
+        }
+    }
+
+    // handle ack packet (Type A)
+    else if (pkt_type == PKT_ACK)
+    {
+        printf("Host %c: Receied ACK from (%d,%d)\n", host->mac, sender_net, sender_machine);
+    }
+
     return 1; // Sucessfully parsed and printed
 }
 
@@ -252,8 +325,131 @@ void TestPStrip(Host *host, int num_hosts)
     if (!prob(10 * host->speed / 3)) // faster hosts have higher chace to send
         return;
 
-    int payload_len = 13 + (rand() % 8);
+    int packet_choice = rand() % 100;
+    char chosen_pkt_type;
+
+    if (packet_choice < 70)
+        chosen_pkt_type = PKT_DATA; // 70% - Regular Data PAckets
+    else if (packet_choice < 85)
+        chosen_pkt_type = PKT_BROADCAST; // 15% - BROADCAST packets
+    else
+        chosen_pkt_type = PKT_CONTROL; // 15% - Control packets
+
+    int payload_len;
     unsigned char payload[BUFFER_SIZE];
+
+    char dest_mac = 0;
+    unsigned char dest_net = host->net;
+    unsigned char dest_machine = 0;
+
+    if (chosen_pkt_type == PKT_BROADCAST)
+    {
+        payload_len = 13 + (rand() % 8);
+
+        // Fill payload with random bytes
+        for (int i = 0; i < payload_len; ++i)
+            payload[i] = (unsigned char)(rand() % 256);
+
+        // Create broadcast packet
+        if (createSIPPacket(host, PKT_BROADCAST, payload, payload_len))
+        {
+            wrapMACFrame(host, BROADCAST_MAC);
+            host->sent++;
+
+            // Create message ID
+            unsigned int msgid = 0;
+            for (int k = 0; k < payload_len && k < 4; ++k)
+                msgid = (msgid << 8) | payload[k];
+
+            printf("TestP%c sent BROADCAST message %u to all hosts (payload %d bytes)\n", host->mac, msgid, payload_len);
+
+            return;
+        }
+
+        // generate control packet (Type C)
+        if (chosen_pkt_type == PKT_CONTROL)
+        {
+            int dest_index;
+            if (num_hosts <= 1)
+                return;
+            do
+            {
+                dest_mac = rand() % num_hosts;
+            } while ((char)('A' + dest_index) == host->mac);
+
+            dest_net = host->net;
+            dest_machine = dest_index + 1;
+            dest_mac = lookupARP(host, dest_index, dest_machine);
+
+            if (!dest_mac)
+            {
+                // need ARP first
+                unsigned char arp_payload[2] = {dest_net, dest_machine};
+                if (createSIPPacket(host, PKT_ARP_REQ, arp_payload, 2))
+                {
+                    wrapMACFrame(host, BROADCAST_MAC);
+                    host->sent++;
+                    printf("Host %c: Unknow MAC for (%d,%d). Sending ARP Request.\n", host->mac, dest_net, dest_machine);
+                }
+                return;
+            }
+
+            // control packet payload
+            payload_len = 1 + (rand() % 5); // 1-5 bytes
+
+            // First byte is control command
+            int cmd_choice = rand() % 4;
+            switch (cmd_choice)
+            {
+            case 0:
+                payload[0] = 0x01;
+                break; // pause
+            case 1:
+                payload[0] = 0x02;
+                break; // resume
+            case 2:
+                payload[0] = 0x03;
+                break; // reste
+            case 3:
+                payload[0] = 0xFF;
+                break; // status request
+            }
+
+            // fill remaining bytes with random data
+            for (int i = 1; i < payload_len; ++i)
+                payload[i] = (unsigned char)(rand() % 256);
+
+            // create control packet
+            if (createSIPPacket(host, PKT_CONTROL, payload, payload_len))
+            {
+                wrapMACFrame(host, dest_mac);
+                host->sent++;
+
+                const char *cmd_name;
+                switch (payload[0])
+                {
+                case 0x01:
+                    cmd_name = "PAUSE"; break;
+                case 0x02:
+                    cmd_name = "RESUME";break;
+                case 0x03:
+                    cmd_name = "RESET";break;
+                case 0xFF:
+                    cmd_name = "STATUS_REQ";break;
+                default:
+                    cmd_name = "UNKNOWN";break;
+                }
+
+                printf("TestP%c sent CONTROL packet (%s) to TestP%c (payload %d bytes)\n",
+                       host->mac, cmd_name, dest_mac, payload_len);
+            }
+        }
+        return;
+    }
+
+
+    // generate data packet (type D)
+    payload_len = 13 + (rand() % 8);
 
     // Fill payload with random bytes
     for (int i = 0; i < payload_len; ++i)
@@ -268,10 +464,9 @@ void TestPStrip(Host *host, int num_hosts)
         dest_index = rand() % num_hosts;
     } while ((char)('A' + dest_index) == host->mac);
 
-    unsigned char dest_net = host->net;
-    unsigned char dest_machine = dest_index + 1;
-
-    char dest_mac = lookupARP(host, dest_net, dest_machine);
+    dest_net = host->net;
+    dest_machine = dest_index + 1;
+    dest_mac = lookupARP(host, dest_net, dest_machine);
 
     if (!dest_mac)
     {
@@ -385,7 +580,6 @@ void lan_connector(Host *hosts, int numhosts)
     sender->buf[0][0] = 0;
 }
 
-
 void initializeHosts(Host hosts[], int num_hosts)
 {
     for (int i = 0; i < num_hosts; ++i)
@@ -440,7 +634,6 @@ void updateARP(Host *host, unsigned char net, unsigned char machine, char mac)
         host->arp_table[host->arp_count].mac = mac;
         host->arp_count++;
     }
-
 }
 
 void printARPTable(Host *host)

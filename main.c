@@ -17,7 +17,7 @@ int main()
     Host hosts[num_hosts];
     initializeHosts(hosts, num_hosts);
 
-    const int SCHED_ITERS = 30;
+    const int SCHED_ITERS = 60;
 
     // Simulation loop
     for (int iter = 0; iter < SCHED_ITERS; ++iter)

@@ -16,6 +16,12 @@
 #define PKT_ARP_REPLY 'R'
 #define MAX_ARP_ENTRIES 10
 
+#define CTRL_PAUSE 0x01;     // pause transmission
+#define CTRL_RESUME 0x02;    // resume transmission
+#define CTRL_RESET 0x03;     // reset connection
+#define CTRL_STATUS 0xFF;    // Status request
+
+
 // Define a port buffer structure d[2][256]
 typedef unsigned char Buffer[2][BUFFER_SIZE];
 
