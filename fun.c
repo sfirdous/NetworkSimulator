@@ -133,9 +133,6 @@ int networkLayerReceive(Host *host)
     // Clear the processed packet buffer
     host->buf[0][0] = 0;
 
-    // ========================================================================
-    // HANDLE ARP REQUEST (Type L)
-    // ========================================================================
     if (pkt_type == PKT_ARP_REQ)
     {
         if (payload_len < 2)
@@ -161,9 +158,6 @@ int networkLayerReceive(Host *host)
         // If ARP request is not for me, ignore it (don't send any ACK)
     }
 
-    // ========================================================================
-    // HANDLE ARP REPLY (Type R)
-    // ========================================================================
     else if (pkt_type == PKT_ARP_REPLY)
     {
         if (payload_len < 3)
@@ -178,9 +172,6 @@ int networkLayerReceive(Host *host)
         updateARP(host, reply_net, reply_machine, reply_mac);
     }
 
-    // ========================================================================
-    // HANDLE DATA PACKET (Type D)
-    // ========================================================================
     else if (pkt_type == PKT_DATA)
     {
         // Try to find destination MAC for the sender to send ACK
@@ -211,9 +202,6 @@ int networkLayerReceive(Host *host)
         }
     }
 
-    // ========================================================================
-    // HANDLE BROADCAST PACKET (Type B)
-    // ========================================================================
     else if (pkt_type == PKT_BROADCAST)
     {
         printf("Host %c: Received BROADCAST message from (%d,%d)\n", 
@@ -232,9 +220,6 @@ int networkLayerReceive(Host *host)
         // NO ACK for broadcast messages
     }
 
-    // ========================================================================
-    // HANDLE CONTROL PACKET (Type C)
-    // ========================================================================
     else if (pkt_type == PKT_CONTROL)
     {
         printf("Host %c: Received CONTROL packet from (%d,%d)\n", 
@@ -283,9 +268,6 @@ int networkLayerReceive(Host *host)
         }
     }
 
-    // ========================================================================
-    // HANDLE ACK PACKET (Type A)
-    // ========================================================================
     else if (pkt_type == PKT_ACK)
     {
         printf("Host %c: Received ACK from (%d,%d)\n", host->mac, sender_net, sender_machine);
@@ -350,9 +332,6 @@ void TestPStrip(Host *host, int num_hosts)
     unsigned char dest_net = host->net;
     unsigned char dest_machine = 0;
 
-    // ========================================================================
-    // GENERATE BROADCAST PACKET (Type B)
-    // ========================================================================
     if (chosen_pkt_type == PKT_BROADCAST)
     {
         payload_len = 13 + (rand() % 8);
@@ -375,9 +354,6 @@ void TestPStrip(Host *host, int num_hosts)
         return;
     }
 
-    // ========================================================================
-    // GENERATE CONTROL PACKET (Type C)
-    // ========================================================================
     if (chosen_pkt_type == PKT_CONTROL)
     {
         if (num_hosts <= 1)
@@ -442,9 +418,7 @@ void TestPStrip(Host *host, int num_hosts)
         return;
     }
 
-    // ========================================================================
-    // GENERATE REGULAR DATA PACKET (Type D)
-    // ========================================================================
+
     if (num_hosts <= 1)
         return;
         
@@ -635,4 +609,22 @@ void printARPTable(Host *host)
                host->arp_table[i].net,
                host->arp_table[i].machine,
                host->arp_table[i].mac);
+}
+
+int userPressedQuit()
+{
+#ifdef _WIN32
+    // Windows implementation using conio.h
+    if (_kbhit())  // Check if a key was pressed
+    {
+        int ch = _getch();  // Get the key
+        if (ch == 'Q' || ch == 'q')
+            return 1;  // User wants to quit
+    }
+    return 0;
+#else
+    // For Linux/Mac, you would need different implementation
+    // For now, just return 0 (not supported on non-Windows)
+    return 0;
+#endif
 }

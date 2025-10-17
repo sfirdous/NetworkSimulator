@@ -42,4 +42,6 @@ char lookupARP(Host *host,unsigned char net,unsigned char machine);
 void updateARP(Host *host,unsigned char net,unsigned char machine,char mac);
 void printARPTable(Host *host);
 
+int userPressedQuit();
+
 #endif

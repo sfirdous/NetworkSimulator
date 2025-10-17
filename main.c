@@ -1,8 +1,7 @@
-#include <stdio.h>
-#include <time.h>
+
 #include "fun.h"
 
-int collision_count = 0; // global counter for LAN collisions
+int collision_count = 0,global_iteration = 0; 
 
 int main()
 {
@@ -17,21 +16,24 @@ int main()
     Host hosts[num_hosts];
     initializeHosts(hosts, num_hosts);
 
-    const int SCHED_ITERS = 60;
 
-    // Simulation loop
-    for (int iter = 0; iter < SCHED_ITERS; ++iter)
+    // Simulation loop - runs until user presses Q
+    int iteration = 0;
+    while (1)
     {
-        printf("\n=== Simulation Iteration %d ===\n", iter + 1);
+        global_iteration = iteration;
+        iteration++;
+        
+        printf("\n=== Simulation Iteration %d ===\n", iteration);
 
-        /* 1. Round robin: each host runs its TestP strip */
+        // 1. Round robin: each host runs its TestP strip
         for (int i = 0; i < num_hosts; i++)
             TestPStrip(&hosts[i], num_hosts);
 
-        /* 2. LAN connector simulates the shared medium */
+        // 2. LAN connector simulates the shared medium
         lan_connector(hosts, num_hosts);
 
-        /* 3. Process incoming frames for each host */
+        // 3. Process incoming frames for each host
         for (int i = 0; i < num_hosts; i++)
         {
             if (hosts[i].buf[1][0] != 0)
@@ -39,10 +41,16 @@ int main()
                 if (dataLinkLayerReceive(&hosts[i]))
                     networkLayerReceive(&hosts[i]);
                 else
-                    clearBuffers(&hosts[i], 1); // not for this host
+                    clearBuffers(&hosts[i], 1);
             }
         }
 
+        // Check if user pressed Q to quit
+        if (userPressedQuit())
+        {
+            printf("\n\n>>> User pressed 'Q' - Stopping simulation <<<\n");
+            break;
+        }
     }
 
     /* 5. Print summary stats */
