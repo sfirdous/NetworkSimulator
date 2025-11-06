@@ -35,15 +35,7 @@ int main()
 
         // 3. Process incoming frames for each host
         for (int i = 0; i < num_hosts; i++)
-        {
-            if (hosts[i].buf[1][0] != 0)
-            {
-                if (dataLinkLayerReceive(&hosts[i]))
-                    networkLayerReceive(&hosts[i]);
-                else
-                    clearBuffers(&hosts[i], 1);
-            }
-        }
+                processIncomingFrames(&hosts[i]);
 
         // Check if user pressed Q to quit
         if (userPressedQuit())

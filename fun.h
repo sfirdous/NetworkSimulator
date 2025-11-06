@@ -43,5 +43,5 @@ void updateARP(Host *host,unsigned char net,unsigned char machine,char mac);
 void printARPTable(Host *host);
 
 int userPressedQuit();
-
+void processIncomingFrames(Host *host);
 #endif
